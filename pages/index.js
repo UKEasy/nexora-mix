@@ -30,11 +30,17 @@ export default function Home() {
 
   async function carregarProdutos() {
 
-    const { data } = await supabase
-      .from("produtos")
-      .select("*");
+    const { data, error } =
+      await supabase
+        .from("produtos")
+        .select("*");
 
-    setProdutos(data || []);
+    if (!error) {
+
+      setProdutos(data);
+
+    }
+
   }
 
   /* =========================
@@ -56,6 +62,7 @@ export default function Home() {
     });
 
     setCarrinhoQtd(total);
+
   }
 
   function adicionarCarrinho(produto) {
@@ -119,7 +126,8 @@ export default function Home() {
 
       setAlerta("");
 
-    }, 2200);
+    }, 2000);
+
   }
 
   /* =========================
@@ -131,7 +139,7 @@ export default function Home() {
       ? produtos
       : produtos.filter(
           (item) =>
-            item.categoria?.toLowerCase() ===
+            item.categoria ===
             categoria
         );
 
@@ -158,8 +166,6 @@ export default function Home() {
       {/* HEADER */}
 
       <header style={styles.header}>
-
-        {/* LOGO */}
 
         <div style={styles.logoArea}>
 
@@ -213,10 +219,13 @@ export default function Home() {
 
           <button
             onClick={() =>
-              setCategoria("eletronicos")
+              setCategoria(
+                "eletronicos"
+              )
             }
             style={
-              categoria === "eletronicos"
+              categoria ===
+              "eletronicos"
                 ? styles.activeNav
                 : styles.nav
             }
@@ -229,10 +238,10 @@ export default function Home() {
         {/* CARRINHO */}
 
         <button
+          style={styles.cart}
           onClick={() =>
             router.push("/carrinho")
           }
-          style={styles.cart}
         >
 
           🛒
@@ -261,8 +270,6 @@ export default function Home() {
 
         <h1 style={styles.heroTitle}>
           Perfumes & Tecnologia
-          <br />
-          em outro nível
         </h1>
 
         <p style={styles.heroText}>
@@ -277,70 +284,83 @@ export default function Home() {
 
         <div style={styles.grid}>
 
-          {produtosFiltrados.map((produto) => (
+          {produtosFiltrados.map(
+            (produto) => (
 
-            <div
-              key={produto.id}
-              style={styles.card}
-            >
+              <div
+                key={produto.id}
+                style={styles.card}
+              >
 
-              {/* FOTO */}
+                {/* FOTO */}
 
-              <div style={styles.imageArea}>
+                <div
+                  style={styles.imageArea}
+                >
 
-                <img
-                  src={produto.img}
-                  style={styles.image}
-                />
-
-              </div>
-
-              {/* CONTEÚDO */}
-
-              <div style={styles.cardContent}>
-
-                <div style={styles.category}>
-
-                  {produto.genero}
+                  <img
+                    src={produto.img}
+                    alt={produto.nome}
+                    style={styles.image}
+                  />
 
                 </div>
 
-                <h2 style={styles.cardTitle}>
+                {/* CONTEÚDO */}
 
-                  {produto.nome}
+                <div
+                  style={styles.cardContent}
+                >
 
-                </h2>
+                  <div
+                    style={styles.category}
+                  >
 
-                <div style={styles.cardBottom}>
-
-                  <div>
-
-                    <div style={styles.price}>
-                      R$ {produto.preco}
-                    </div>
+                    {produto.genero}
 
                   </div>
 
-                  {/* BOTÃO */}
-
-                  <button
-                    style={styles.buyBtn}
-                    onClick={() =>
-                      adicionarCarrinho(
-                        produto
-                      )
-                    }
+                  <h2
+                    style={styles.cardTitle}
                   >
-                    +
-                  </button>
+
+                    {produto.nome}
+
+                  </h2>
+
+                  <div
+                    style={styles.cardBottom}
+                  >
+
+                    <div
+                      style={styles.price}
+                    >
+
+                      R$ {produto.preco}
+
+                    </div>
+
+                    <button
+                      style={
+                        styles.buyBtn
+                      }
+                      onClick={() =>
+                        adicionarCarrinho(
+                          produto
+                        )
+                      }
+                    >
+                      +
+                    </button>
+
+                  </div>
 
                 </div>
 
               </div>
 
-            </div>
-
-          ))}
+            )
+          )}
 
         </div>
 
@@ -349,19 +369,18 @@ export default function Home() {
     </div>
 
   );
+
 }
 
 const styles = {
 
-  /* PAGE */
-
   page: {
     minHeight: "100vh",
     background:
-      "linear-gradient(to bottom, #050505, #0d0d0d)",
+      "linear-gradient(to bottom,#050505,#111)",
     color: "#fff",
     fontFamily: "Arial",
-    paddingBottom: 60
+    paddingBottom: 80
   },
 
   /* ALERTA */
@@ -373,20 +392,18 @@ const styles = {
     right: 0,
     display: "flex",
     justifyContent: "center",
-    zIndex: 99999,
-    pointerEvents: "none"
+    zIndex: 9999
   },
 
   alerta: {
     background:
       "linear-gradient(135deg,#facc15,#fde047)",
     color: "#000",
-    padding: "18px 30px",
-    borderRadius: 18,
+    padding: "16px 28px",
+    borderRadius: 16,
     fontWeight: "bold",
-    fontSize: 16,
     boxShadow:
-      "0 20px 40px rgba(0,0,0,0.35)"
+      "0 15px 35px rgba(0,0,0,0.35)"
   },
 
   /* HEADER */
@@ -399,10 +416,8 @@ const styles = {
     position: "sticky",
     top: 0,
     zIndex: 999,
-    backdropFilter: "blur(18px)",
-    background: "rgba(0,0,0,0.55)",
-    borderBottom:
-      "1px solid rgba(255,255,255,0.05)"
+    backdropFilter: "blur(15px)",
+    background: "rgba(0,0,0,0.55)"
   },
 
   logoArea: {
@@ -412,8 +427,8 @@ const styles = {
   },
 
   logoIcon: {
-    width: 50,
-    height: 50,
+    width: 52,
+    height: 52,
     borderRadius: 18,
     background:
       "linear-gradient(135deg,#facc15,#fde047)",
@@ -422,9 +437,7 @@ const styles = {
     alignItems: "center",
     justifyContent: "center",
     fontWeight: "bold",
-    fontSize: 22,
-    boxShadow:
-      "0 10px 30px rgba(250,204,21,0.35)"
+    fontSize: 24
   },
 
   logo: {
@@ -450,10 +463,9 @@ const styles = {
   nav: {
     padding: "12px 18px",
     borderRadius: 14,
+    border: "none",
     background:
-      "rgba(255,255,255,0.04)",
-    border:
-      "1px solid rgba(255,255,255,0.06)",
+      "rgba(255,255,255,0.05)",
     color: "#fff",
     cursor: "pointer",
     transition: "0.3s"
@@ -462,14 +474,12 @@ const styles = {
   activeNav: {
     padding: "12px 18px",
     borderRadius: 14,
+    border: "none",
     background:
       "linear-gradient(135deg,#facc15,#fde047)",
-    border: "none",
     color: "#000",
     fontWeight: "bold",
-    cursor: "pointer",
-    boxShadow:
-      "0 10px 30px rgba(250,204,21,0.35)"
+    cursor: "pointer"
   },
 
   /* CARRINHO */
@@ -481,37 +491,31 @@ const styles = {
     border: "none",
     background:
       "linear-gradient(135deg,#facc15,#fde047)",
+    fontSize: 22,
     cursor: "pointer",
-    fontSize: 20,
-    position: "relative",
-    boxShadow:
-      "0 10px 30px rgba(250,204,21,0.35)",
-    transition: "0.3s"
+    position: "relative"
   },
 
   cartBadge: {
     position: "absolute",
     top: -5,
     right: -5,
-    background:
-      "linear-gradient(135deg,#ffffff,#f3f4f6)",
+    background: "#fff",
     color: "#000",
     width: 28,
     height: 28,
     borderRadius: "50%",
-    fontSize: 12,
-    fontWeight: "bold",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    boxShadow:
-      "0 8px 20px rgba(0,0,0,0.35)"
+    fontWeight: "bold",
+    fontSize: 12
   },
 
   /* HERO */
 
   hero: {
-    padding: "90px 40px 50px",
+    padding: "80px 40px 50px",
     textAlign: "center"
   },
 
@@ -522,15 +526,12 @@ const styles = {
     background:
       "rgba(250,204,21,0.1)",
     color: "#facc15",
-    marginBottom: 24,
-    border:
-      "1px solid rgba(250,204,21,0.2)"
+    marginBottom: 22
   },
 
   heroTitle: {
-    fontSize: 64,
-    lineHeight: 1,
-    marginBottom: 24
+    fontSize: 62,
+    marginBottom: 18
   },
 
   heroText: {
@@ -547,7 +548,7 @@ const styles = {
   grid: {
     display: "grid",
     gridTemplateColumns:
-      "repeat(auto-fit, minmax(250px, 1fr))",
+      "repeat(auto-fit,minmax(240px,1fr))",
     gap: 28
   },
 
@@ -560,13 +561,14 @@ const styles = {
     overflow: "hidden",
     border:
       "1px solid rgba(255,255,255,0.06)",
-    backdropFilter: "blur(20px)",
-    transition: "all 0.35s ease",
-    cursor: "pointer"
+    transition: "0.35s ease",
+    cursor: "pointer",
+    boxShadow:
+      "0 10px 30px rgba(0,0,0,0.2)"
   },
 
   imageArea: {
-    height: 270,
+    height: 260,
     overflow: "hidden"
   },
 
@@ -574,7 +576,8 @@ const styles = {
     width: "100%",
     height: "100%",
     objectFit: "cover",
-    transition: "transform 0.5s ease"
+    transition:
+      "transform 0.5s ease"
   },
 
   cardContent: {
@@ -584,29 +587,28 @@ const styles = {
   category: {
     fontSize: 11,
     opacity: 0.5,
-    textTransform: "uppercase",
     marginBottom: 12,
+    textTransform: "uppercase",
     letterSpacing: 2
   },
 
   cardTitle: {
     margin: 0,
     fontSize: 20,
-    lineHeight: 1.4,
-    minHeight: 56
+    minHeight: 55
   },
 
   cardBottom: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    marginTop: 26
+    marginTop: 24
   },
 
   price: {
     color: "#facc15",
-    fontSize: 28,
-    fontWeight: "bold"
+    fontWeight: "bold",
+    fontSize: 28
   },
 
   buyBtn: {
@@ -620,9 +622,7 @@ const styles = {
     fontSize: 28,
     fontWeight: "bold",
     cursor: "pointer",
-    transition: "0.25s",
-    boxShadow:
-      "0 10px 25px rgba(250,204,21,0.25)"
+    transition: "0.3s"
   }
 
 };
