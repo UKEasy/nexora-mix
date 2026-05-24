@@ -514,6 +514,8 @@ const styles = {
     width: "fit-content"
   },
 
+
+
   /* FOOTER */
 
   footer: {
