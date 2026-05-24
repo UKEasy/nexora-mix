@@ -142,32 +142,26 @@ export default function Carrinho() {
     mensagem += `%0A💰 Total: R$ ${total.toFixed(2)}`;
 
     const linhasProdutos = carrinho
-      .map(montarLinhaTabela)
-      .join("\n");
+      .map((item) => {
+        const quantidade =
+          item.qtd > 1 ? ` x${item.qtd}` : "";
 
-    const resumoItens = carrinho
-      .map((item) =>
-        `- ${item.nome} | ${item.qtd}x ${formatarMoeda(item.preco)}`
-      )
-      .join("\n");
+        return (
+          `🛍️ *${item.nome}${quantidade}*\n` +
+          `   ${formatarMoeda(item.preco)} cada`
+        );
+      })
+      .join("\n\n");
 
     mensagem = `
-*NOVO PEDIDO - NEXORA*
+✨ *Pedido Nexora* ✨
 
-Ola! Gostaria de finalizar este pedido:
-
-\`\`\`
-PRODUTO              QTD     SUBTOTAL
--------------------------------------
 ${linhasProdutos}
--------------------------------------
-TOTAL                ${formatarMoeda(total).padStart(12, " ")}
-\`\`\`
 
-Resumo dos itens:
-${resumoItens}
+💰 *Total:* ${formatarMoeda(total)}
 
-Total do pedido: *${formatarMoeda(total)}*
+💳 *Forma de pagamento desejada:*
+Pix / Cartao / Dinheiro
 `.trim();
 
     window.open(
