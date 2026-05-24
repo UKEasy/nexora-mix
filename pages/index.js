@@ -6,9 +6,12 @@ function contarItensCarrinho() {
   if (typeof window === "undefined")
     return 0;
 
-  const carrinho = JSON.parse(
-    localStorage.getItem("carrinho") || "[]"
-  );
+  if (typeof window === "undefined")
+  return;
+
+const carrinho = JSON.parse(
+  localStorage.getItem("carrinho") || "[]"
+);
 
   return carrinho.reduce(
     (total, item) => total + item.qtd,
