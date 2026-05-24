@@ -1,29 +1,43 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/router";
+
+const WHATSAPP_NUMBER = "5519989212646";
+
+const pagamentoOpcoes = [
+  "Pix",
+  "Cartão",
+  "Dinheiro"
+];
+
+function lerCarrinhoSalvo() {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  return JSON.parse(
+    localStorage.getItem("carrinho") || "[]"
+  );
+}
 
 export default function Carrinho() {
 
   const router = useRouter();
 
-  const [carrinho, setCarrinho] = useState([]);
-
-  useEffect(() => {
-
-    carregarCarrinho();
-
-  }, []);
-
-  function carregarCarrinho() {
-
-    const dados = JSON.parse(
-      localStorage.getItem("carrinho") || "[]"
-    );
-
-    setCarrinho(dados);
-  }
+  const [carrinho, setCarrinho] =
+    useState(lerCarrinhoSalvo);
+  const [pagamento, setPagamento] = useState("Pix");
+  const [entrega, setEntrega] = useState("retirada");
+  const [cep, setCep] = useState("");
+  const [endereco, setEndereco] = useState("");
+  const [numero, setNumero] = useState("");
+  const [tipoResidencia, setTipoResidencia] = useState("casa");
+  const [complemento, setComplemento] = useState("");
+  const [apto, setApto] = useState("");
+  const [buscandoCep, setBuscandoCep] = useState(false);
+  const [cepStatus, setCepStatus] = useState("");
+  const [erroCheckout, setErroCheckout] = useState("");
 
   function atualizarCarrinho(novoCarrinho) {
-
     localStorage.setItem(
       "carrinho",
       JSON.stringify(novoCarrinho)
@@ -33,44 +47,30 @@ export default function Carrinho() {
   }
 
   function aumentarQuantidade(id) {
-
     const novoCarrinho = carrinho.map((item) => {
-
-      if (
-        String(item.id) === String(id)
-      ) {
-
+      if (String(item.id) === String(id)) {
         return {
           ...item,
           qtd: item.qtd + 1
         };
-
       }
 
       return item;
-
     });
 
     atualizarCarrinho(novoCarrinho);
   }
 
   function diminuirQuantidade(id) {
-
     let novoCarrinho = carrinho.map((item) => {
-
-      if (
-        String(item.id) === String(id)
-      ) {
-
+      if (String(item.id) === String(id)) {
         return {
           ...item,
           qtd: item.qtd - 1
         };
-
       }
 
       return item;
-
     });
 
     novoCarrinho = novoCarrinho.filter(
@@ -81,7 +81,6 @@ export default function Carrinho() {
   }
 
   function removerProduto(id) {
-
     const novoCarrinho = carrinho.filter(
       (item) =>
         String(item.id) !== String(id)
@@ -103,94 +102,246 @@ export default function Carrinho() {
     });
   }
 
-  function limitarTexto(texto, tamanho) {
-    const textoSeguro = String(texto || "");
+  function limparCep(valor) {
+    return valor.replace(/\D/g, "").slice(0, 8);
+  }
 
-    if (textoSeguro.length <= tamanho) {
-      return textoSeguro.padEnd(tamanho, " ");
+  function atualizarCep(valor) {
+    setCep(limparCep(valor));
+    setCepStatus("");
+  }
+
+  async function buscarCep() {
+    const cepLimpo = limparCep(cep);
+
+    if (cepLimpo.length !== 8) {
+      setCepStatus("Digite um CEP com 8 números.");
+      return;
     }
 
-    return `${textoSeguro.slice(0, tamanho - 3)}...`;
+    setBuscandoCep(true);
+    setCepStatus("Buscando endereço...");
+
+    try {
+      const resposta = await fetch(
+        `https://viacep.com.br/ws/${cepLimpo}/json/`
+      );
+      const dados = await resposta.json();
+
+      if (dados.erro) {
+        setCepStatus("CEP não encontrado. Digite o endereço manualmente.");
+        return;
+      }
+
+      setEndereco(
+        [
+          dados.logradouro,
+          dados.bairro,
+          dados.localidade,
+          dados.uf
+        ]
+          .filter(Boolean)
+          .join(", ")
+      );
+      setCepStatus("Endereço encontrado. Complete o número.");
+    } catch {
+      setCepStatus("Não consegui buscar o CEP. Digite o endereço manualmente.");
+    } finally {
+      setBuscandoCep(false);
+    }
   }
 
-  function montarLinhaTabela(item) {
-    const nome = limitarTexto(item.nome, 18);
-    const qtd = String(item.qtd).padStart(3, " ");
-    const subtotal = formatarMoeda(
-      Number(item.preco) * item.qtd
-    ).padStart(12, " ");
+  function validarCheckout() {
+    if (carrinho.length === 0) {
+      return "Seu carrinho está vazio.";
+    }
 
-    return `${nome} ${qtd} ${subtotal}`;
+    if (!pagamento) {
+      return "Escolha uma forma de pagamento.";
+    }
+
+    if (entrega === "tele") {
+      if (!endereco.trim()) {
+        return "Informe o endereço da entrega.";
+      }
+
+      if (!numero.trim()) {
+        return "Informe o número da casa ou prédio.";
+      }
+
+      if (tipoResidencia === "apartamento" && !apto.trim()) {
+        return "Informe o número do apartamento.";
+      }
+    }
+
+    return "";
   }
 
-  function finalizarPedido() {
-
-    if (carrinho.length === 0) return;
-
-    let mensagem =
-      "🛒 *NOVO PEDIDO - NEXORA*%0A%0A";
-
-    carrinho.forEach((item) => {
-
-      mensagem +=
-        `• ${item.nome} ` +
-        `(x${item.qtd}) - ` +
-        `R$ ${item.preco}%0A`;
-
-    });
-
-    mensagem += `%0A💰 Total: R$ ${total.toFixed(2)}`;
-
-    const linhasProdutos = carrinho
+  function montarResumoProdutos() {
+    return carrinho
       .map((item) => {
         const quantidade =
-          item.qtd > 1 ? ` x${item.qtd}` : "";
+          item.qtd > 1 ? `  x${item.qtd}` : "";
 
         return (
-          `🛍️ *${item.nome}${quantidade}*\n` +
-          `   ${formatarMoeda(item.preco)} cada`
+          `🛍️ *${item.nome}*${quantidade}\n` +
+          `   💵 ${formatarMoeda(item.preco)} cada`
         );
       })
       .join("\n\n");
+  }
 
-    mensagem = `
-✨ *Pedido Nexora* ✨
+  function montarResumoEntrega() {
+    if (entrega === "retirada") {
+      return "🏬 *Entrega:* Retirada em loja";
+    }
 
-${linhasProdutos}
+    const linhas = [
+      "🛵 *Entrega:* Tele-entrega",
+      cep ? `📍 *CEP:* ${cep}` : "",
+      `📌 *Endereço:* ${endereco}`,
+      `🏠 *Número:* ${numero}`,
+      `🏡 *Tipo:* ${tipoResidencia === "apartamento" ? "Apartamento" : "Casa"}`
+    ];
 
-💰 *Total:* ${formatarMoeda(total)}
+    if (tipoResidencia === "apartamento") {
+      linhas.push(`🚪 *Apto:* ${apto}`);
+    }
 
-💳 *Forma de pagamento desejada:*
-Pix / Cartao / Dinheiro
+    if (complemento.trim()) {
+      linhas.push(`📝 *Complemento:* ${complemento}`);
+    }
+
+    return linhas.filter(Boolean).join("\n");
+  }
+
+  function finalizarPedido() {
+    const erro = validarCheckout();
+
+    if (erro) {
+      setErroCheckout(erro);
+      return;
+    }
+
+    setErroCheckout("");
+
+    const mensagem = `
+✨ *NEXORA | Novo pedido* ✨
+━━━━━━━━━━━━━━━━━━━━
+
+🛒 *Produtos escolhidos*
+${montarResumoProdutos()}
+
+━━━━━━━━━━━━━━━━━━━━
+💰 *Total do pedido:* ${formatarMoeda(total)}
+💳 *Pagamento desejado:* ${pagamento}
+
+${montarResumoEntrega()}
+
+✅ Aguardo a confirmação, obrigado!
 `.trim();
 
     window.open(
-      `https://wa.me/5519996645367?text=${encodeURIComponent(mensagem)}`,
+      `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(mensagem)}`,
       "_blank"
     );
   }
 
   return (
 
-    <div style={styles.page}>
+    <div
+      className="cart-page"
+      style={styles.page}
+    >
 
-      {/* HEADER */}
+      <style jsx global>{`
+        @media (max-width: 980px) {
+          .cart-header,
+          .cart-footer {
+            padding-left: 22px !important;
+            padding-right: 22px !important;
+          }
 
-      <header style={styles.header}>
+          .cart-content {
+            grid-template-columns: 1fr !important;
+            padding: 24px !important;
+          }
+
+          .cart-checkout {
+            position: static !important;
+          }
+        }
+
+        @media (max-width: 640px) {
+          .cart-page {
+            padding-bottom: 210px !important;
+          }
+
+          .cart-header {
+            align-items: flex-start !important;
+            flex-direction: column !important;
+          }
+
+          .cart-title {
+            font-size: 30px !important;
+          }
+
+          .cart-back {
+            width: 100% !important;
+          }
+
+          .cart-card {
+            flex-direction: column !important;
+          }
+
+          .cart-image {
+            width: 100% !important;
+            height: 230px !important;
+          }
+
+          .cart-bottom {
+            align-items: flex-start !important;
+            flex-direction: column !important;
+          }
+
+          .cart-cep-row,
+          .cart-apto-grid {
+            grid-template-columns: 1fr !important;
+          }
+
+          .cart-footer {
+            align-items: stretch !important;
+            flex-direction: column !important;
+          }
+
+          .cart-checkout-btn {
+            width: 100% !important;
+          }
+        }
+      `}</style>
+
+      <header
+        className="cart-header"
+        style={styles.header}
+      >
 
         <div>
 
-          <h1 style={styles.title}>
+          <h1
+            className="cart-title"
+            style={styles.title}
+          >
             Seu Carrinho
           </h1>
 
           <p style={styles.subtitle}>
-            Revise seus produtos
+            Revise seus produtos e escolha a entrega
           </p>
 
         </div>
 
         <button
+          className="cart-back"
           onClick={() => router.push("/")}
           style={styles.backBtn}
         >
@@ -199,126 +350,351 @@ Pix / Cartao / Dinheiro
 
       </header>
 
-      {/* LISTA */}
+      <main
+        className="cart-content"
+        style={styles.content}
+      >
 
-      <div style={styles.lista}>
+        <section style={styles.lista}>
 
-        {carrinho.length === 0 && (
+          {carrinho.length === 0 && (
 
-          <div style={styles.empty}>
+            <div style={styles.empty}>
+              🛒 Seu carrinho está vazio
+            </div>
 
-            🛒 Seu carrinho está vazio
+          )}
 
-          </div>
+          {carrinho.map((item) => (
 
-        )}
+            <div
+              className="cart-card"
+              key={item.id}
+              style={styles.card}
+            >
 
-        {carrinho.map((item) => (
+              <img
+                className="cart-image"
+                src={item.img}
+                alt={item.nome}
+                style={styles.image}
+              />
 
-          <div
-            key={item.id}
-            style={styles.card}
-          >
-
-            {/* FOTO */}
-
-            <img
-              src={item.img}
-              style={styles.image}
-            />
-
-            {/* INFO */}
-
-            <div style={styles.info}>
-
-              <div>
-
-                <p style={styles.category}>
-                  {item.genero}
-                </p>
-
-                <h2 style={styles.name}>
-                  {item.nome}
-                </h2>
-
-              </div>
-
-              <div style={styles.bottom}>
+              <div style={styles.info}>
 
                 <div>
 
-                  <p style={styles.price}>
-                    R$ {item.preco}
+                  <p style={styles.category}>
+                    {item.genero}
                   </p>
 
-                  <p style={styles.totalItem}>
-                    Total: R${" "}
-                    {(
-                      Number(item.preco) *
-                      item.qtd
-                    ).toFixed(2)}
-                  </p>
+                  <h2 style={styles.name}>
+                    {item.nome}
+                  </h2>
 
                 </div>
 
-                {/* QUANTIDADE */}
+                <div
+                  className="cart-bottom"
+                  style={styles.bottom}
+                >
 
-                <div style={styles.qtdArea}>
+                  <div>
 
-                  <button
-                    style={styles.qtdBtn}
-                    onClick={() =>
-                      diminuirQuantidade(
-                        item.id
-                      )
-                    }
-                  >
-                    −
-                  </button>
+                    <p style={styles.price}>
+                      {formatarMoeda(item.preco)}
+                    </p>
 
-                  <span style={styles.qtd}>
-                    {item.qtd}
-                  </span>
+                    <p style={styles.totalItem}>
+                      Total:{" "}
+                      {formatarMoeda(
+                        Number(item.preco) *
+                        item.qtd
+                      )}
+                    </p>
 
-                  <button
-                    style={styles.qtdBtn}
-                    onClick={() =>
-                      aumentarQuantidade(
-                        item.id
-                      )
-                    }
-                  >
-                    +
-                  </button>
+                  </div>
+
+                  <div style={styles.qtdArea}>
+
+                    <button
+                      style={styles.qtdBtn}
+                      onClick={() =>
+                        diminuirQuantidade(
+                          item.id
+                        )
+                      }
+                    >
+                      −
+                    </button>
+
+                    <span style={styles.qtd}>
+                      {item.qtd}
+                    </span>
+
+                    <button
+                      style={styles.qtdBtn}
+                      onClick={() =>
+                        aumentarQuantidade(
+                          item.id
+                        )
+                      }
+                    >
+                      +
+                    </button>
+
+                  </div>
 
                 </div>
+
+                <button
+                  style={styles.removeBtn}
+                  onClick={() =>
+                    removerProduto(item.id)
+                  }
+                >
+                  Remover produto
+                </button>
 
               </div>
 
-              {/* REMOVER */}
+            </div>
 
-              <button
-                style={styles.removeBtn}
-                onClick={() =>
-                  removerProduto(item.id)
-                }
-              >
-                Remover produto
-              </button>
+          ))}
+
+        </section>
+
+        {carrinho.length > 0 && (
+
+          <aside
+            className="cart-checkout"
+            style={styles.checkoutPanel}
+          >
+
+            <div>
+
+              <p style={styles.sectionLabel}>
+                Pagamento
+              </p>
+
+              <div style={styles.optionGrid}>
+
+                {pagamentoOpcoes.map((opcao) => (
+
+                  <button
+                    key={opcao}
+                    style={
+                      pagamento === opcao
+                        ? styles.optionActive
+                        : styles.option
+                    }
+                    onClick={() =>
+                      setPagamento(opcao)
+                    }
+                  >
+                    {opcao}
+                  </button>
+
+                ))}
+
+              </div>
 
             </div>
 
-          </div>
+            <div>
 
-        ))}
+              <p style={styles.sectionLabel}>
+                Entrega
+              </p>
 
-      </div>
+              <div style={styles.optionGrid}>
 
-      {/* FOOTER */}
+                <button
+                  style={
+                    entrega === "retirada"
+                      ? styles.optionActive
+                      : styles.option
+                  }
+                  onClick={() =>
+                    setEntrega("retirada")
+                  }
+                >
+                  Retirada
+                </button>
+
+                <button
+                  style={
+                    entrega === "tele"
+                      ? styles.optionActive
+                      : styles.option
+                  }
+                  onClick={() =>
+                    setEntrega("tele")
+                  }
+                >
+                  Tele
+                </button>
+
+              </div>
+
+            </div>
+
+            {entrega === "tele" && (
+
+              <div style={styles.addressBox}>
+
+                <p style={styles.sectionLabel}>
+                  Endereço
+                </p>
+
+                <div
+                  className="cart-cep-row"
+                  style={styles.cepRow}
+                >
+
+                  <input
+                    value={cep}
+                    onChange={(event) =>
+                      atualizarCep(event.target.value)
+                    }
+                    placeholder="CEP"
+                    inputMode="numeric"
+                    style={styles.input}
+                  />
+
+                  <button
+                    onClick={buscarCep}
+                    disabled={buscandoCep}
+                    style={styles.secondaryBtn}
+                  >
+                    {buscandoCep ? "Buscando" : "Buscar"}
+                  </button>
+
+                </div>
+
+                {cepStatus && (
+
+                  <p style={styles.hint}>
+                    {cepStatus}
+                  </p>
+
+                )}
+
+                <textarea
+                  value={endereco}
+                  onChange={(event) =>
+                    setEndereco(event.target.value)
+                  }
+                  placeholder="Endereço completo"
+                  rows={3}
+                  style={styles.textarea}
+                />
+
+                <input
+                  value={numero}
+                  onChange={(event) =>
+                    setNumero(event.target.value)
+                  }
+                  placeholder="Número da casa/prédio"
+                  style={styles.input}
+                />
+
+                <div style={styles.optionGrid}>
+
+                  <button
+                    style={
+                      tipoResidencia === "casa"
+                        ? styles.optionActive
+                        : styles.option
+                    }
+                    onClick={() =>
+                      setTipoResidencia("casa")
+                    }
+                  >
+                    Casa
+                  </button>
+
+                  <button
+                    style={
+                      tipoResidencia === "apartamento"
+                        ? styles.optionActive
+                        : styles.option
+                    }
+                    onClick={() =>
+                      setTipoResidencia("apartamento")
+                    }
+                  >
+                    Apartamento
+                  </button>
+
+                </div>
+
+                {tipoResidencia === "apartamento" && (
+
+                  <div
+                    className="cart-apto-grid"
+                    style={styles.aptoGrid}
+                  >
+
+                    <input
+                      value={apto}
+                      onChange={(event) =>
+                        setApto(event.target.value)
+                      }
+                      placeholder="Nº do apto"
+                      style={styles.input}
+                    />
+
+                    <input
+                      value={complemento}
+                      onChange={(event) =>
+                        setComplemento(event.target.value)
+                      }
+                      placeholder="Complemento"
+                      style={styles.input}
+                    />
+
+                  </div>
+
+                )}
+
+                {tipoResidencia === "casa" && (
+
+                  <input
+                    value={complemento}
+                    onChange={(event) =>
+                      setComplemento(event.target.value)
+                    }
+                    placeholder="Complemento (opcional)"
+                    style={styles.input}
+                  />
+
+                )}
+
+              </div>
+
+            )}
+
+            {erroCheckout && (
+
+              <p style={styles.errorText}>
+                {erroCheckout}
+              </p>
+
+            )}
+
+          </aside>
+
+        )}
+
+      </main>
 
       {carrinho.length > 0 && (
 
-        <div style={styles.footer}>
+        <div
+          className="cart-footer"
+          style={styles.footer}
+        >
 
           <div>
 
@@ -327,16 +703,17 @@ Pix / Cartao / Dinheiro
             </p>
 
             <h2 style={styles.footerTotal}>
-              R$ {total.toFixed(2)}
+              {formatarMoeda(total)}
             </h2>
 
           </div>
 
           <button
+            className="cart-checkout-btn"
             style={styles.checkoutBtn}
             onClick={finalizarPedido}
           >
-            Finalizar Pedido
+            Finalizar no WhatsApp
           </button>
 
         </div>
@@ -354,16 +731,15 @@ const styles = {
     minHeight: "100vh",
     background: "#050505",
     color: "#fff",
-    fontFamily: "Arial",
-    paddingBottom: 140
+    fontFamily: "Arial, Helvetica, sans-serif",
+    paddingBottom: 150
   },
-
-  /* HEADER */
 
   header: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
+    gap: 20,
     padding: "30px 40px",
     borderBottom:
       "1px solid rgba(255,255,255,0.06)"
@@ -388,10 +764,16 @@ const styles = {
     cursor: "pointer"
   },
 
-  /* LISTA */
+  content: {
+    display: "grid",
+    gridTemplateColumns:
+      "minmax(0, 1fr) minmax(320px, 420px)",
+    gap: 28,
+    padding: 40,
+    alignItems: "start"
+  },
 
   lista: {
-    padding: 40,
     display: "flex",
     flexDirection: "column",
     gap: 24
@@ -406,8 +788,6 @@ const styles = {
     fontSize: 18,
     opacity: 0.7
   },
-
-  /* CARD */
 
   card: {
     display: "flex",
@@ -432,7 +812,8 @@ const styles = {
     flex: 1,
     display: "flex",
     flexDirection: "column",
-    justifyContent: "space-between"
+    justifyContent: "space-between",
+    minWidth: 0
   },
 
   category: {
@@ -443,13 +824,15 @@ const styles = {
   },
 
   name: {
-    fontSize: 28
+    fontSize: 28,
+    lineHeight: 1.2
   },
 
   bottom: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
+    gap: 18,
     marginTop: 20
   },
 
@@ -463,8 +846,6 @@ const styles = {
     opacity: 0.6,
     marginTop: 8
   },
-
-  /* QUANTIDADE */
 
   qtdArea: {
     display: "flex",
@@ -495,8 +876,6 @@ const styles = {
     textAlign: "center"
   },
 
-  /* REMOVER */
-
   removeBtn: {
     marginTop: 20,
     background: "transparent",
@@ -508,9 +887,133 @@ const styles = {
     width: "fit-content"
   },
 
+  checkoutPanel: {
+    position: "sticky",
+    top: 22,
+    display: "flex",
+    flexDirection: "column",
+    gap: 24,
+    background:
+      "rgba(255,255,255,0.04)",
+    border:
+      "1px solid rgba(255,255,255,0.08)",
+    borderRadius: 28,
+    padding: 24,
+    backdropFilter: "blur(20px)"
+  },
 
+  sectionLabel: {
+    color: "#facc15",
+    fontWeight: "bold",
+    marginBottom: 12,
+    textTransform: "uppercase",
+    fontSize: 12,
+    letterSpacing: 1
+  },
 
-  /* FOOTER */
+  optionGrid: {
+    display: "grid",
+    gridTemplateColumns:
+      "repeat(auto-fit, minmax(96px, 1fr))",
+    gap: 10
+  },
+
+  option: {
+    minHeight: 46,
+    borderRadius: 14,
+    border:
+      "1px solid rgba(255,255,255,0.09)",
+    background:
+      "rgba(255,255,255,0.05)",
+    color: "#fff",
+    fontWeight: "bold",
+    cursor: "pointer"
+  },
+
+  optionActive: {
+    minHeight: 46,
+    borderRadius: 14,
+    border: "none",
+    background: "#facc15",
+    color: "#000",
+    fontWeight: "bold",
+    cursor: "pointer"
+  },
+
+  addressBox: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 12
+  },
+
+  cepRow: {
+    display: "grid",
+    gridTemplateColumns: "1fr 105px",
+    gap: 10
+  },
+
+  input: {
+    width: "100%",
+    minHeight: 48,
+    borderRadius: 14,
+    border:
+      "1px solid rgba(255,255,255,0.08)",
+    background:
+      "rgba(255,255,255,0.06)",
+    color: "#fff",
+    padding: "0 14px",
+    fontSize: 15,
+    outline: "none"
+  },
+
+  textarea: {
+    width: "100%",
+    borderRadius: 14,
+    border:
+      "1px solid rgba(255,255,255,0.08)",
+    background:
+      "rgba(255,255,255,0.06)",
+    color: "#fff",
+    padding: 14,
+    fontSize: 15,
+    outline: "none",
+    resize: "vertical",
+    fontFamily: "Arial, Helvetica, sans-serif"
+  },
+
+  secondaryBtn: {
+    minHeight: 48,
+    borderRadius: 14,
+    border: "none",
+    background:
+      "rgba(250,204,21,0.16)",
+    color: "#facc15",
+    fontWeight: "bold",
+    cursor: "pointer"
+  },
+
+  hint: {
+    color: "#facc15",
+    opacity: 0.85,
+    fontSize: 13
+  },
+
+  aptoGrid: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: 10
+  },
+
+  errorText: {
+    color: "#ff7a7a",
+    background:
+      "rgba(255,0,0,0.08)",
+    border:
+      "1px solid rgba(255,0,0,0.18)",
+    borderRadius: 14,
+    padding: 12,
+    fontWeight: "bold"
+  },
 
   footer: {
     position: "fixed",
@@ -524,7 +1027,8 @@ const styles = {
     padding: "24px 40px",
     display: "flex",
     justifyContent: "space-between",
-    alignItems: "center"
+    alignItems: "center",
+    gap: 20
   },
 
   footerText: {

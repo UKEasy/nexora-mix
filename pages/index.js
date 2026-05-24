@@ -1,70 +1,43 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/router";
 import { supabase } from "../lib/supabase";
 
-export default function Home() {
+function contarItensCarrinho() {
+  if (typeof window === "undefined")
+    return 0;
+
+  const carrinho = JSON.parse(
+    localStorage.getItem("carrinho") || "[]"
+  );
+
+  return carrinho.reduce(
+    (total, item) => total + item.qtd,
+    0
+  );
+}
+
+export default function Home({
+  produtosIniciais = []
+}) {
 
   const router = useRouter();
 
-  const [produtos, setProdutos] = useState([]);
+  const produtos = produtosIniciais;
   const [categoria, setCategoria] =
     useState("todos");
 
   const [carrinhoQtd, setCarrinhoQtd] =
-    useState(0);
+    useState(contarItensCarrinho);
 
   const [alerta, setAlerta] =
     useState("");
-
-  useEffect(() => {
-
-    carregarProdutos();
-
-    atualizarCarrinho();
-
-  }, []);
-
-  /* =========================
-     PRODUTOS
-  ========================== */
-
-  async function carregarProdutos() {
-
-    const { data, error } =
-      await supabase
-        .from("produtos")
-        .select("*");
-
-    if (!error) {
-
-      setProdutos(data);
-
-    }
-
-  }
 
   /* =========================
      CARRINHO
   ========================== */
 
   function atualizarCarrinho() {
-
-    if (typeof window === "undefined")
-      return;
-
-    const carrinho = JSON.parse(
-      localStorage.getItem("carrinho") || "[]"
-    );
-
-    let total = 0;
-
-    carrinho.forEach((item) => {
-
-      total += item.qtd;
-
-    });
-
-    setCarrinhoQtd(total);
+    setCarrinhoQtd(contarItensCarrinho());
 
   }
 
@@ -144,7 +117,80 @@ export default function Home() {
 
   return (
 
-    <div style={styles.page}>
+    <div
+      className="home-page"
+      style={styles.page}
+    >
+
+      <style jsx global>{`
+        @media (max-width: 860px) {
+          .home-header {
+            align-items: flex-start !important;
+            flex-direction: column !important;
+            padding: 20px 22px !important;
+          }
+
+          .home-nav {
+            width: 100% !important;
+            overflow-x: auto !important;
+            padding-bottom: 4px !important;
+          }
+
+          .home-cart {
+            position: absolute !important;
+            top: 20px !important;
+            right: 22px !important;
+          }
+
+          .home-hero {
+            padding: 60px 22px 36px !important;
+          }
+
+          .home-title {
+            font-size: 42px !important;
+            line-height: 1.08 !important;
+          }
+
+          .home-products {
+            padding: 0 22px !important;
+          }
+        }
+
+        @media (max-width: 520px) {
+          .home-page {
+            padding-bottom: 48px !important;
+          }
+
+          .home-logo-icon {
+            width: 46px !important;
+            height: 46px !important;
+          }
+
+          .home-logo {
+            font-size: 24px !important;
+          }
+
+          .home-cart {
+            width: 48px !important;
+            height: 48px !important;
+            border-radius: 15px !important;
+          }
+
+          .home-nav button {
+            white-space: nowrap !important;
+            padding-left: 14px !important;
+            padding-right: 14px !important;
+          }
+
+          .home-title {
+            font-size: 34px !important;
+          }
+
+          .home-grid {
+            grid-template-columns: 1fr !important;
+          }
+        }
+      `}</style>
 
       {/* ALERTA */}
 
@@ -164,19 +210,28 @@ export default function Home() {
 
       {/* HEADER */}
 
-      <header style={styles.header}>
+      <header
+        className="home-header"
+        style={styles.header}
+      >
 
         {/* LOGO */}
 
         <div style={styles.logoArea}>
 
-          <div style={styles.logoIcon}>
+          <div
+            className="home-logo-icon"
+            style={styles.logoIcon}
+          >
             N
           </div>
 
           <div>
 
-            <h1 style={styles.logo}>
+            <h1
+              className="home-logo"
+              style={styles.logo}
+            >
               NEXORA
             </h1>
 
@@ -190,7 +245,10 @@ export default function Home() {
 
         {/* MENU */}
 
-        <div style={styles.navButtons}>
+        <div
+          className="home-nav"
+          style={styles.navButtons}
+        >
 
           <button
             onClick={() =>
@@ -239,6 +297,7 @@ export default function Home() {
         {/* CARRINHO */}
 
         <button
+          className="home-cart"
           style={styles.cart}
           onClick={() =>
             router.push("/carrinho")
@@ -263,13 +322,19 @@ export default function Home() {
 
       {/* HERO */}
 
-      <section style={styles.hero}>
+      <section
+        className="home-hero"
+        style={styles.hero}
+      >
 
         <div style={styles.badge}>
           PREMIUM STORE
         </div>
 
-        <h1 style={styles.heroTitle}>
+        <h1
+          className="home-title"
+          style={styles.heroTitle}
+        >
           Perfumes & Tecnologia
         </h1>
 
@@ -281,9 +346,15 @@ export default function Home() {
 
       {/* PRODUTOS */}
 
-      <section style={styles.productsSection}>
+      <section
+        className="home-products"
+        style={styles.productsSection}
+      >
 
-        <div style={styles.grid}>
+        <div
+          className="home-grid"
+          style={styles.grid}
+        >
 
           {produtosFiltrados.map(
             (produto) => (
@@ -615,3 +686,16 @@ const styles = {
   }
 
 };
+
+export async function getServerSideProps() {
+  const { data, error } =
+    await supabase
+      .from("produtos")
+      .select("*");
+
+  return {
+    props: {
+      produtosIniciais: error ? [] : data || []
+    }
+  };
+}
