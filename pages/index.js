@@ -1,11 +1,13 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/router";
 import {
   eletronicosDestaque,
   eletronicosMaio,
   perfumesDestaque,
-  perfumesMaio
+  perfumesMaio,
+  produtosMaio
 } from "../lib/produtosMaio";
+import { supabase } from "../lib/supabase";
 
 const generoOpcoes = [
   { id: "todos", label: "Todos" },
@@ -42,6 +44,27 @@ function labelGenero(genero) {
   return "Eletrônico";
 }
 
+function normalizarNome(nome) {
+  return String(nome || "")
+    .trim()
+    .toLowerCase();
+}
+
+function correspondeBusca(produto, termo) {
+  if (!termo) return true;
+
+  return [
+    produto.nome,
+    produto.tipo,
+    produto.genero,
+    produto.categoria
+  ]
+    .filter(Boolean)
+    .some((valor) =>
+      normalizarNome(valor).includes(termo)
+    );
+}
+
 export default function Home() {
 
   const router = useRouter();
@@ -53,25 +76,48 @@ export default function Home() {
     useState(contarItensCarrinho);
   const [alerta, setAlerta] =
     useState("");
+  const [fotosProdutos, setFotosProdutos] =
+    useState({});
+
+  const termoBusca = busca
+    .trim()
+    .toLowerCase();
+
+  useEffect(() => {
+    async function carregarFotosProdutos() {
+      const { data } = await supabase
+        .from("produtos")
+        .select("nome,img");
+
+      const fotos = {};
+
+      (data || []).forEach((produto) => {
+        if (produto.nome && produto.img) {
+          fotos[normalizarNome(produto.nome)] = produto.img;
+        }
+      });
+
+      setFotosProdutos(fotos);
+    }
+
+    carregarFotosProdutos();
+  }, []);
 
   const perfumesFiltrados = useMemo(() => {
-    const termo = busca
-      .trim()
-      .toLowerCase();
-
     return perfumesMaio.filter((produto) => {
       const combinaGenero =
         genero === "todos" ||
         produto.genero === genero;
 
-      const combinaBusca =
-        !termo ||
-        produto.nome.toLowerCase().includes(termo) ||
-        produto.tipo.toLowerCase().includes(termo);
-
-      return combinaGenero && combinaBusca;
+      return combinaGenero;
     });
-  }, [busca, genero]);
+  }, [genero]);
+
+  const produtosEncontrados = useMemo(() => {
+    return produtosMaio.filter((produto) =>
+      correspondeBusca(produto, termoBusca)
+    );
+  }, [termoBusca]);
 
   function atualizarCarrinho() {
     setCarrinhoQtd(contarItensCarrinho());
@@ -121,14 +167,24 @@ export default function Home() {
 
   function abrirView(novaView) {
     setView(novaView);
+    setBusca("");
 
     if (novaView !== "perfumes") {
-      setBusca("");
       setGenero("todos");
     }
   }
 
+  function obterFotoProduto(produto) {
+    return (
+      fotosProdutos[normalizarNome(produto.nome)] ||
+      produto.img ||
+      ""
+    );
+  }
+
   function renderCard(produto) {
+    const fotoProduto = obterFotoProduto(produto);
+
     return (
 
       <article
@@ -137,11 +193,22 @@ export default function Home() {
         style={styles.card}
       >
 
-        <div style={styles.visualArea}>
+        <div
+          style={
+            fotoProduto
+              ? {
+                  ...styles.photoArea,
+                  backgroundImage:
+                    `linear-gradient(to bottom, rgba(0,0,0,0.03), rgba(0,0,0,0.45)), url("${fotoProduto.replace(/"/g, "%22")}")`
+                }
+              : styles.visualArea
+          }
+        >
 
           <div
             style={{
               ...styles.visualOrb,
+              display: fotoProduto ? "none" : "flex",
               background:
                 produto.categoria === "eletronicos"
                   ? "linear-gradient(135deg,#38bdf8,#facc15)"
@@ -150,10 +217,6 @@ export default function Home() {
           >
             {produto.categoria === "eletronicos" ? "⌁" : "N"}
           </div>
-
-          <span style={styles.stockBadge}>
-            {produto.estoque} un.
-          </span>
 
         </div>
 
@@ -182,7 +245,10 @@ export default function Home() {
             <button
               style={styles.buyBtn}
               onClick={() =>
-                adicionarCarrinho(produto)
+                adicionarCarrinho({
+                  ...produto,
+                  img: fotoProduto
+                })
               }
               aria-label={`Adicionar ${produto.nome} ao carrinho`}
             >
@@ -419,7 +485,76 @@ export default function Home() {
 
       </section>
 
-      {view === "destaques" && (
+      <section
+        className="home-section"
+        style={styles.searchPanel}
+      >
+
+        <input
+          className="search-input"
+          value={busca}
+          onChange={(event) =>
+            setBusca(event.target.value)
+          }
+          placeholder="Pesquisar produto"
+          style={styles.searchWide}
+        />
+
+        <span style={styles.searchHelp}>
+          Busque por nome, categoria ou tipo
+        </span>
+
+      </section>
+
+      {termoBusca && (
+
+        <main
+          className="home-section"
+          style={styles.productsSection}
+        >
+
+          <div style={styles.sectionHeader}>
+
+            <div>
+
+              <p style={styles.sectionEyebrow}>
+                Resultado da busca
+              </p>
+
+              <h2 style={styles.sectionTitle}>
+                Produtos encontrados
+              </h2>
+
+            </div>
+
+            <span style={styles.countPill}>
+              {produtosEncontrados.length} itens
+            </span>
+
+          </div>
+
+          {produtosEncontrados.length > 0 ? (
+
+            <div
+              className="home-grid"
+              style={styles.grid}
+            >
+              {produtosEncontrados.map(renderCard)}
+            </div>
+
+          ) : (
+
+            <div style={styles.emptySearch}>
+              Nenhum produto encontrado.
+            </div>
+
+          )}
+
+        </main>
+
+      )}
+
+      {!termoBusca && view === "destaques" && (
 
         <main
           className="home-section"
@@ -492,7 +627,7 @@ export default function Home() {
 
       )}
 
-      {view === "perfumes" && (
+      {!termoBusca && view === "perfumes" && (
 
         <main
           className="home-section"
@@ -523,16 +658,6 @@ export default function Home() {
             className="filter-row"
             style={styles.filterRow}
           >
-
-            <input
-              className="search-input"
-              value={busca}
-              onChange={(event) =>
-                setBusca(event.target.value)
-              }
-              placeholder="Pesquisar perfume"
-              style={styles.search}
-            />
 
             <div
               className="perfume-tabs"
@@ -572,7 +697,7 @@ export default function Home() {
 
       )}
 
-      {view === "eletronicos" && (
+      {!termoBusca && view === "eletronicos" && (
 
         <main
           className="home-section"
@@ -791,6 +916,36 @@ const styles = {
     gap: 40
   },
 
+  searchPanel: {
+    maxWidth: 760,
+    margin: "0 auto 34px",
+    padding: "0 40px",
+    display: "flex",
+    flexDirection: "column",
+    gap: 10
+  },
+
+  searchWide: {
+    width: "100%",
+    minHeight: 54,
+    borderRadius: 18,
+    border:
+      "1px solid rgba(255,255,255,0.1)",
+    background:
+      "rgba(255,255,255,0.07)",
+    color: "#fff",
+    padding: "0 18px",
+    fontSize: 16,
+    outline: "none"
+  },
+
+  searchHelp: {
+    color: "#facc15",
+    opacity: 0.78,
+    fontSize: 13,
+    textAlign: "center"
+  },
+
   block: {
     display: "flex",
     flexDirection: "column",
@@ -889,6 +1044,17 @@ const styles = {
     gap: 24
   },
 
+  emptySearch: {
+    border:
+      "1px solid rgba(255,255,255,0.08)",
+    borderRadius: 20,
+    background:
+      "rgba(255,255,255,0.04)",
+    padding: 28,
+    textAlign: "center",
+    color: "rgba(255,255,255,0.68)"
+  },
+
   card: {
     display: "flex",
     flexDirection: "column",
@@ -913,6 +1079,14 @@ const styles = {
       "radial-gradient(circle at 50% 30%, rgba(250,204,21,0.22), rgba(255,255,255,0.03) 42%, rgba(255,255,255,0.01))"
   },
 
+  photoArea: {
+    position: "relative",
+    minHeight: 210,
+    backgroundSize: "cover",
+    backgroundPosition: "center",
+    backgroundRepeat: "no-repeat"
+  },
+
   visualOrb: {
     width: 92,
     height: 92,
@@ -925,21 +1099,6 @@ const styles = {
     fontSize: 36,
     boxShadow:
       "0 18px 45px rgba(0,0,0,0.35)"
-  },
-
-  stockBadge: {
-    position: "absolute",
-    top: 14,
-    right: 14,
-    borderRadius: 999,
-    background:
-      "rgba(0,0,0,0.5)",
-    border:
-      "1px solid rgba(255,255,255,0.08)",
-    color: "#fff",
-    padding: "7px 10px",
-    fontSize: 12,
-    fontWeight: "bold"
   },
 
   cardContent: {

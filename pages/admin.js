@@ -1,320 +1,533 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { produtosMaio } from "../lib/produtosMaio";
 import { supabase } from "../lib/supabase";
+
+function normalizarNome(nome) {
+  return String(nome || "")
+    .trim()
+    .toLowerCase();
+}
+
+function formatarMoeda(valor) {
+  return Number(valor).toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL"
+  });
+}
+
+function correspondeBusca(produto, termo) {
+  if (!termo) return true;
+
+  return [
+    produto.nome,
+    produto.tipo,
+    produto.genero,
+    produto.categoria
+  ]
+    .filter(Boolean)
+    .some((valor) =>
+      normalizarNome(valor).includes(termo)
+    );
+}
 
 export default function Admin() {
 
-  const [produtos, setProdutos] =
-    useState([]);
-
-  const [nome, setNome] =
+  const [fotosPorNome, setFotosPorNome] =
+    useState({});
+  const [edicoes, setEdicoes] =
+    useState({});
+  const [busca, setBusca] =
     useState("");
-
-  const [preco, setPreco] =
+  const [status, setStatus] =
     useState("");
-
-  const [categoria, setCategoria] =
-    useState("perfume");
-
-  const [genero, setGenero] =
-    useState("Masculino");
-
-  const [img, setImg] =
+  const [salvandoId, setSalvandoId] =
     useState("");
 
   useEffect(() => {
+    async function carregarFotos() {
+      const { data, error } = await supabase
+        .from("produtos")
+        .select("nome,img");
 
-    carregarProdutos();
+      if (error) {
+        setStatus("Nao consegui carregar as fotos salvas.");
+        return;
+      }
 
-  }, []);
+      const fotos = {};
+      const proximasEdicoes = {};
 
-  async function carregarProdutos() {
-
-    const { data } = await supabase
-      .from("produtos")
-      .select("*")
-      .order("id", {
-        ascending: false
+      (data || []).forEach((produto) => {
+        if (produto.nome && produto.img) {
+          const chave = normalizarNome(produto.nome);
+          fotos[chave] = produto.img;
+        }
       });
 
-    setProdutos(data || []);
+      produtosMaio.forEach((produto) => {
+        proximasEdicoes[produto.id] =
+          fotos[normalizarNome(produto.nome)] || "";
+      });
 
-  }
-
-  async function adicionarProduto() {
-
-    if (
-      !nome ||
-      !preco ||
-      !img
-    ) {
-
-      alert("Preencha tudo");
-
-      return;
-
+      setFotosPorNome(fotos);
+      setEdicoes(proximasEdicoes);
     }
 
-    const { error } =
+    carregarFotos();
+  }, []);
+
+  const produtosFiltrados = useMemo(() => {
+    const termo = busca
+      .trim()
+      .toLowerCase();
+
+    return produtosMaio.filter((produto) =>
+      correspondeBusca(produto, termo)
+    );
+  }, [busca]);
+
+  function fotoAtual(produto) {
+    return (
+      edicoes[produto.id] ??
+      fotosPorNome[normalizarNome(produto.nome)] ??
+      ""
+    );
+  }
+
+  function atualizarFoto(id, valor) {
+    setEdicoes((atual) => ({
+      ...atual,
+      [id]: valor
+    }));
+  }
+
+  async function salvarFoto(produto) {
+    const img = String(edicoes[produto.id] || "")
+      .trim();
+
+    if (!img) {
+      setStatus("Cole o link da foto antes de salvar.");
+      return;
+    }
+
+    setSalvandoId(produto.id);
+    setStatus("");
+
+    const payload = {
+      nome: produto.nome,
+      preco: produto.preco,
+      categoria: produto.categoria,
+      genero: produto.genero,
+      img
+    };
+
+    const { data: atualizados, error: erroUpdate } =
       await supabase
         .from("produtos")
-        .insert([
-          {
-            nome,
-            preco,
-            categoria,
-            genero,
-            img
-          }
-        ]);
+        .update(payload)
+        .eq("nome", produto.nome)
+        .select("id");
 
-    if (!error) {
-
-      alert("Produto criado");
-
-      setNome("");
-      setPreco("");
-      setImg("");
-
-      carregarProdutos();
-
+    if (erroUpdate) {
+      setStatus("Nao consegui salvar a foto. Confira o link e tente novamente.");
+      setSalvandoId("");
+      return;
     }
 
+    if (!atualizados || atualizados.length === 0) {
+      const { error: erroInsert } = await supabase
+        .from("produtos")
+        .insert([payload]);
+
+      if (erroInsert) {
+        setStatus("Nao consegui criar o registro da foto.");
+        setSalvandoId("");
+        return;
+      }
+    }
+
+    setFotosPorNome((atual) => ({
+      ...atual,
+      [normalizarNome(produto.nome)]: img
+    }));
+    setStatus("Foto salva com sucesso.");
+    setSalvandoId("");
   }
 
-  async function deletarProduto(id) {
+  async function removerFoto(produto) {
+    setSalvandoId(produto.id);
+    setStatus("");
 
     await supabase
       .from("produtos")
-      .delete()
-      .eq("id", id);
+      .update({ img: "" })
+      .eq("nome", produto.nome);
 
-    carregarProdutos();
-
+    setFotosPorNome((atual) => {
+      const copia = { ...atual };
+      delete copia[normalizarNome(produto.nome)];
+      return copia;
+    });
+    atualizarFoto(produto.id, "");
+    setStatus("Foto removida.");
+    setSalvandoId("");
   }
 
   return (
 
-    <div style={styles.page}>
+    <div
+      className="admin-page"
+      style={styles.page}
+    >
 
-      <h1 style={styles.title}>
-        Painel Admin
-      </h1>
-
-      {/* FORM */}
-
-      <div style={styles.form}>
-
-        <input
-          placeholder="Nome"
-          value={nome}
-          onChange={(e) =>
-            setNome(e.target.value)
+      <style jsx global>{`
+        @media (max-width: 760px) {
+          .admin-page {
+            padding: 22px !important;
           }
-          style={styles.input}
-        />
 
-        <input
-          placeholder="Preço"
-          value={preco}
-          onChange={(e) =>
-            setPreco(e.target.value)
+          .admin-header {
+            align-items: stretch !important;
+            flex-direction: column !important;
           }
-          style={styles.input}
-        />
 
-        <input
-          placeholder="Imagem URL"
-          value={img}
-          onChange={(e) =>
-            setImg(e.target.value)
+          .admin-title {
+            font-size: 32px !important;
           }
-          style={styles.input}
-        />
 
-        <select
-          value={categoria}
-          onChange={(e) =>
-            setCategoria(
-              e.target.value
-            )
+          .admin-grid {
+            grid-template-columns: 1fr !important;
           }
-          style={styles.input}
-        >
+        }
+      `}</style>
 
-          <option value="perfume">
-            Perfume
-          </option>
+      <header
+        className="admin-header"
+        style={styles.header}
+      >
 
-          <option value="eletronicos">
-            Eletrônicos
-          </option>
+        <div>
 
-        </select>
+          <p style={styles.eyebrow}>
+            Painel da vitrine
+          </p>
 
-        <select
-          value={genero}
-          onChange={(e) =>
-            setGenero(
-              e.target.value
-            )
-          }
-          style={styles.input}
-        >
-
-          <option>
-            Masculino
-          </option>
-
-          <option>
-            Feminino
-          </option>
-
-          <option>
-            Unissex
-          </option>
-
-        </select>
-
-        <button
-          onClick={
-            adicionarProduto
-          }
-          style={styles.button}
-        >
-
-          Adicionar Produto
-
-        </button>
-
-      </div>
-
-      {/* PRODUTOS */}
-
-      <div style={styles.grid}>
-
-        {produtos.map((produto) => (
-
-          <div
-            key={produto.id}
-            style={styles.card}
+          <h1
+            className="admin-title"
+            style={styles.title}
           >
+            Fotos dos produtos
+          </h1>
 
-            <img
-              src={produto.img}
-              style={styles.image}
-            />
+          <p style={styles.subtitle}>
+            Cole o link da imagem no produto e salve. A foto aparece na loja automaticamente.
+          </p>
 
-            <h2>
-              {produto.nome}
-            </h2>
+        </div>
 
-            <p>
-              R$ {produto.preco}
-            </p>
+        <input
+          value={busca}
+          onChange={(event) =>
+            setBusca(event.target.value)
+          }
+          placeholder="Pesquisar produto"
+          style={styles.search}
+        />
 
-            <p>
-              {produto.genero}
-            </p>
+      </header>
 
-            <button
-              style={styles.delete}
-              onClick={() =>
-                deletarProduto(
-                  produto.id
-                )
-              }
+      {status && (
+
+        <div style={styles.status}>
+          {status}
+        </div>
+
+      )}
+
+      <main
+        className="admin-grid"
+        style={styles.grid}
+      >
+
+        {produtosFiltrados.map((produto) => {
+          const foto = fotoAtual(produto);
+          const salvando =
+            salvandoId === produto.id;
+
+          return (
+
+            <article
+              key={produto.id}
+              style={styles.card}
             >
 
-              Excluir
+              <div
+                style={
+                  foto
+                    ? {
+                        ...styles.preview,
+                        backgroundImage:
+                          `linear-gradient(to bottom, rgba(0,0,0,0.02), rgba(0,0,0,0.48)), url("${foto.replace(/"/g, "%22")}")`
+                      }
+                    : styles.emptyPreview
+                }
+              >
+                {!foto && (
+                  <span style={styles.previewIcon}>
+                    N
+                  </span>
+                )}
+              </div>
 
-            </button>
+              <div style={styles.cardBody}>
 
-          </div>
+                <p style={styles.category}>
+                  {produto.tipo}
+                </p>
 
-        ))}
+                <h2 style={styles.name}>
+                  {produto.nome}
+                </h2>
 
-      </div>
+                <p style={styles.price}>
+                  {formatarMoeda(produto.preco)}
+                </p>
+
+                <input
+                  value={foto}
+                  onChange={(event) =>
+                    atualizarFoto(
+                      produto.id,
+                      event.target.value
+                    )
+                  }
+                  placeholder="Link da foto"
+                  style={styles.input}
+                />
+
+                <div style={styles.actions}>
+
+                  <button
+                    onClick={() =>
+                      salvarFoto(produto)
+                    }
+                    disabled={salvando}
+                    style={styles.saveButton}
+                  >
+                    {salvando ? "Salvando" : "Salvar foto"}
+                  </button>
+
+                  <button
+                    onClick={() =>
+                      removerFoto(produto)
+                    }
+                    disabled={salvando || !foto}
+                    style={styles.removeButton}
+                  >
+                    Remover
+                  </button>
+
+                </div>
+
+              </div>
+
+            </article>
+
+          );
+        })}
+
+      </main>
 
     </div>
 
   );
-
 }
 
 const styles = {
 
   page: {
     minHeight: "100vh",
-    background: "#0a0a0a",
+    background:
+      "linear-gradient(to bottom,#050505,#101010)",
     color: "#fff",
     padding: 40,
-    fontFamily: "Arial"
+    fontFamily: "Arial, Helvetica, sans-serif"
+  },
+
+  header: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "end",
+    gap: 24,
+    marginBottom: 28
+  },
+
+  eyebrow: {
+    color: "#facc15",
+    fontWeight: "bold",
+    fontSize: 12,
+    letterSpacing: 1.4,
+    textTransform: "uppercase",
+    marginBottom: 8
   },
 
   title: {
-    fontSize: 42,
-    marginBottom: 40,
-    color: "#facc15"
-  },
-
-  form: {
-    display: "grid",
-    gap: 18,
-    marginBottom: 50,
-    maxWidth: 500
-  },
-
-  input: {
-    padding: 16,
-    borderRadius: 14,
-    border: "none",
-    background: "#1a1a1a",
+    margin: 0,
     color: "#fff",
-    fontSize: 16
+    fontSize: 42,
+    lineHeight: 1.04
   },
 
-  button: {
-    padding: 18,
+  subtitle: {
+    maxWidth: 620,
+    marginTop: 12,
+    opacity: 0.65,
+    lineHeight: 1.5
+  },
+
+  search: {
+    width: "min(100%, 360px)",
+    minHeight: 50,
     borderRadius: 16,
-    border: "none",
+    border:
+      "1px solid rgba(255,255,255,0.1)",
     background:
-      "linear-gradient(135deg,#facc15,#fde047)",
-    color: "#000",
-    fontWeight: "bold",
-    cursor: "pointer",
-    fontSize: 16
+      "rgba(255,255,255,0.06)",
+    color: "#fff",
+    padding: "0 16px",
+    fontSize: 15,
+    outline: "none"
+  },
+
+  status: {
+    marginBottom: 24,
+    border:
+      "1px solid rgba(250,204,21,0.22)",
+    borderRadius: 16,
+    background:
+      "rgba(250,204,21,0.1)",
+    color: "#facc15",
+    padding: 14,
+    fontWeight: "bold"
   },
 
   grid: {
     display: "grid",
     gridTemplateColumns:
-      "repeat(auto-fit,minmax(240px,1fr))",
-    gap: 24
+      "repeat(auto-fit,minmax(260px,1fr))",
+    gap: 22
   },
 
   card: {
-    background: "#141414",
-    padding: 18,
-    borderRadius: 22
+    overflow: "hidden",
+    borderRadius: 22,
+    border:
+      "1px solid rgba(255,255,255,0.08)",
+    background:
+      "rgba(255,255,255,0.04)",
+    boxShadow:
+      "0 18px 45px rgba(0,0,0,0.22)"
   },
 
-  image: {
-    width: "100%",
-    height: 220,
-    objectFit: "cover",
-    borderRadius: 18
+  preview: {
+    minHeight: 220,
+    backgroundSize: "cover",
+    backgroundPosition: "center",
+    backgroundRepeat: "no-repeat"
   },
 
-  delete: {
-    marginTop: 14,
+  emptyPreview: {
+    minHeight: 220,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    background:
+      "radial-gradient(circle at 50% 25%, rgba(250,204,21,0.24), rgba(255,255,255,0.03) 45%, rgba(255,255,255,0.01))"
+  },
+
+  previewIcon: {
+    width: 74,
+    height: 74,
+    borderRadius: 20,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    background:
+      "linear-gradient(135deg,#facc15,#fde047)",
+    color: "#050505",
+    fontSize: 34,
+    fontWeight: "bold"
+  },
+
+  cardBody: {
+    padding: 18
+  },
+
+  category: {
+    margin: 0,
+    color: "#facc15",
+    fontSize: 12,
+    fontWeight: "bold",
+    textTransform: "uppercase",
+    letterSpacing: 1
+  },
+
+  name: {
+    minHeight: 58,
+    margin: "10px 0",
+    fontSize: 20,
+    lineHeight: 1.25
+  },
+
+  price: {
+    marginBottom: 14,
+    color: "#facc15",
+    fontSize: 22,
+    fontWeight: "bold"
+  },
+
+  input: {
     width: "100%",
-    padding: 14,
+    minHeight: 46,
+    borderRadius: 14,
+    border:
+      "1px solid rgba(255,255,255,0.08)",
+    background:
+      "rgba(255,255,255,0.06)",
+    color: "#fff",
+    padding: "0 14px",
+    fontSize: 14,
+    outline: "none"
+  },
+
+  actions: {
+    display: "grid",
+    gridTemplateColumns: "1fr 105px",
+    gap: 10,
+    marginTop: 12
+  },
+
+  saveButton: {
+    minHeight: 46,
     borderRadius: 14,
     border: "none",
-    background: "#ff3b30",
+    background:
+      "linear-gradient(135deg,#facc15,#fde047)",
+    color: "#000",
+    fontWeight: "bold",
+    cursor: "pointer"
+  },
+
+  removeButton: {
+    minHeight: 46,
+    borderRadius: 14,
+    border:
+      "1px solid rgba(255,255,255,0.08)",
+    background:
+      "rgba(255,255,255,0.05)",
     color: "#fff",
-    cursor: "pointer",
-    fontWeight: "bold"
+    fontWeight: "bold",
+    cursor: "pointer"
   }
 
 };
