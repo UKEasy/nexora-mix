@@ -373,19 +373,35 @@ ${montarResumoEntrega()}
               style={styles.card}
             >
 
-              <img
-                className="cart-image"
-                src={item.img}
-                alt={item.nome}
-                style={styles.image}
-              />
+              {item.img ? (
+
+                <img
+                  className="cart-image"
+                  src={item.img}
+                  alt={item.nome}
+                  style={styles.image}
+                />
+
+              ) : (
+
+                <div
+                  className="cart-image"
+                  aria-label={item.nome}
+                  style={styles.imageFallback}
+                >
+                  <span style={styles.imageFallbackIcon}>
+                    N
+                  </span>
+                </div>
+
+              )}
 
               <div style={styles.info}>
 
                 <div>
 
                   <p style={styles.category}>
-                    {item.genero}
+                    {item.genero || item.tipo}
                   </p>
 
                   <h2 style={styles.name}>
@@ -806,6 +822,35 @@ const styles = {
     height: 180,
     objectFit: "cover",
     borderRadius: 20
+  },
+
+  imageFallback: {
+    width: 180,
+    height: 180,
+    borderRadius: 20,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+    background:
+      "radial-gradient(circle at 35% 20%, rgba(255,255,255,0.7), transparent 22%), linear-gradient(135deg,#facc15,#fde047)",
+    color: "#050505",
+    boxShadow:
+      "inset 0 0 0 1px rgba(0,0,0,0.12)"
+  },
+
+  imageFallbackIcon: {
+    width: 68,
+    height: 68,
+    borderRadius: 18,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    background: "rgba(5,5,5,0.92)",
+    color: "#facc15",
+    fontSize: 34,
+    fontWeight: "bold",
+    letterSpacing: 1
   },
 
   info: {

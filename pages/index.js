@@ -1,17 +1,26 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/router";
-import { supabase } from "../lib/supabase";
+import {
+  eletronicosDestaque,
+  eletronicosMaio,
+  perfumesDestaque,
+  perfumesMaio
+} from "../lib/produtosMaio";
+
+const generoOpcoes = [
+  { id: "todos", label: "Todos" },
+  { id: "feminino", label: "Feminino" },
+  { id: "masculino", label: "Masculino" },
+  { id: "unisex", label: "Unisex" }
+];
 
 function contarItensCarrinho() {
   if (typeof window === "undefined")
     return 0;
 
-  if (typeof window === "undefined")
-  return;
-
-const carrinho = JSON.parse(
-  localStorage.getItem("carrinho") || "[]"
-);
+  const carrinho = JSON.parse(
+    localStorage.getItem("carrinho") || "[]"
+  );
 
   return carrinho.reduce(
     (total, item) => total + item.qtd,
@@ -19,72 +28,83 @@ const carrinho = JSON.parse(
   );
 }
 
-export default function Home({
-  produtosIniciais = []
-}) {
+function formatarMoeda(valor) {
+  return Number(valor).toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL"
+  });
+}
+
+function labelGenero(genero) {
+  if (genero === "feminino") return "Feminino";
+  if (genero === "masculino") return "Masculino";
+  if (genero === "unisex") return "Unisex";
+  return "Eletrônico";
+}
+
+export default function Home() {
 
   const router = useRouter();
 
-  const produtos = produtosIniciais;
-  const [categoria, setCategoria] =
-    useState("todos");
-
+  const [view, setView] = useState("destaques");
+  const [genero, setGenero] = useState("todos");
+  const [busca, setBusca] = useState("");
   const [carrinhoQtd, setCarrinhoQtd] =
     useState(contarItensCarrinho);
-
   const [alerta, setAlerta] =
     useState("");
 
-  /* =========================
-     CARRINHO
-  ========================== */
+  const perfumesFiltrados = useMemo(() => {
+    const termo = busca
+      .trim()
+      .toLowerCase();
+
+    return perfumesMaio.filter((produto) => {
+      const combinaGenero =
+        genero === "todos" ||
+        produto.genero === genero;
+
+      const combinaBusca =
+        !termo ||
+        produto.nome.toLowerCase().includes(termo) ||
+        produto.tipo.toLowerCase().includes(termo);
+
+      return combinaGenero && combinaBusca;
+    });
+  }, [busca, genero]);
 
   function atualizarCarrinho() {
     setCarrinhoQtd(contarItensCarrinho());
-
   }
 
   function adicionarCarrinho(produto) {
-
     const carrinho = JSON.parse(
       localStorage.getItem("carrinho") || "[]"
     );
 
     const existe = carrinho.find(
       (item) =>
-        item.id === produto.id
+        String(item.id) === String(produto.id)
     );
 
-    let novoCarrinho = [];
+    const novoCarrinho = existe
+      ? carrinho.map((item) => {
+          if (String(item.id) === String(produto.id)) {
+            return {
+              ...item,
+              qtd: item.qtd + 1
+            };
+          }
 
-    if (existe) {
-
-      novoCarrinho = carrinho.map((item) => {
-
-        if (item.id === produto.id) {
-
-          return {
-            ...item,
-            qtd: item.qtd + 1
-          };
-
-        }
-
-        return item;
-
-      });
-
-    } else {
-
-      novoCarrinho = [
-        ...carrinho,
-        {
-          ...produto,
-          qtd: 1
-        }
-      ];
-
-    }
+          return item;
+        })
+      : [
+          ...carrinho,
+          {
+            ...produto,
+            qtd: 1
+          }
+        ];
 
     localStorage.setItem(
       "carrinho",
@@ -92,31 +112,91 @@ export default function Home({
     );
 
     atualizarCarrinho();
-
-    setAlerta(
-      "Produto adicionado ao carrinho"
-    );
+    setAlerta("Produto adicionado ao carrinho");
 
     setTimeout(() => {
-
       setAlerta("");
-
     }, 2000);
-
   }
 
-  /* =========================
-     FILTRO
-  ========================== */
+  function abrirView(novaView) {
+    setView(novaView);
 
-  const produtosFiltrados =
-    categoria === "todos"
-      ? produtos
-      : produtos.filter(
-          (item) =>
-            item.categoria ===
-            categoria
-        );
+    if (novaView !== "perfumes") {
+      setBusca("");
+      setGenero("todos");
+    }
+  }
+
+  function renderCard(produto) {
+    return (
+
+      <article
+        key={produto.id}
+        className="product-card"
+        style={styles.card}
+      >
+
+        <div style={styles.visualArea}>
+
+          <div
+            style={{
+              ...styles.visualOrb,
+              background:
+                produto.categoria === "eletronicos"
+                  ? "linear-gradient(135deg,#38bdf8,#facc15)"
+                  : "linear-gradient(135deg,#facc15,#f472b6)"
+            }}
+          >
+            {produto.categoria === "eletronicos" ? "⌁" : "N"}
+          </div>
+
+          <span style={styles.stockBadge}>
+            {produto.estoque} un.
+          </span>
+
+        </div>
+
+        <div style={styles.cardContent}>
+
+          <div style={styles.metaRow}>
+            <span style={styles.category}>
+              {produto.tipo}
+            </span>
+
+            <span style={styles.gender}>
+              {labelGenero(produto.genero)}
+            </span>
+          </div>
+
+          <h2 style={styles.cardTitle}>
+            {produto.nome}
+          </h2>
+
+          <div style={styles.cardBottom}>
+
+            <div style={styles.price}>
+              {formatarMoeda(produto.preco)}
+            </div>
+
+            <button
+              style={styles.buyBtn}
+              onClick={() =>
+                adicionarCarrinho(produto)
+              }
+              aria-label={`Adicionar ${produto.nome} ao carrinho`}
+            >
+              +
+            </button>
+
+          </div>
+
+        </div>
+
+      </article>
+
+    );
+  }
 
   return (
 
@@ -126,14 +206,15 @@ export default function Home({
     >
 
       <style jsx global>{`
-        @media (max-width: 860px) {
+        @media (max-width: 920px) {
           .home-header {
             align-items: flex-start !important;
             flex-direction: column !important;
             padding: 20px 22px !important;
           }
 
-          .home-nav {
+          .home-nav,
+          .perfume-tabs {
             width: 100% !important;
             overflow-x: auto !important;
             padding-bottom: 4px !important;
@@ -146,7 +227,7 @@ export default function Home({
           }
 
           .home-hero {
-            padding: 60px 22px 36px !important;
+            padding: 54px 22px 34px !important;
           }
 
           .home-title {
@@ -154,16 +235,21 @@ export default function Home({
             line-height: 1.08 !important;
           }
 
-          .home-products {
+          .home-section {
             padding: 0 22px !important;
+          }
+
+          .filter-row {
+            align-items: stretch !important;
+            flex-direction: column !important;
+          }
+
+          .search-input {
+            width: 100% !important;
           }
         }
 
-        @media (max-width: 520px) {
-          .home-page {
-            padding-bottom: 48px !important;
-          }
-
+        @media (max-width: 560px) {
           .home-logo-icon {
             width: 46px !important;
             height: 46px !important;
@@ -179,10 +265,9 @@ export default function Home({
             border-radius: 15px !important;
           }
 
-          .home-nav button {
+          .home-nav button,
+          .perfume-tabs button {
             white-space: nowrap !important;
-            padding-left: 14px !important;
-            padding-right: 14px !important;
           }
 
           .home-title {
@@ -191,34 +276,31 @@ export default function Home({
 
           .home-grid {
             grid-template-columns: 1fr !important;
+            gap: 18px !important;
+          }
+
+          .product-card {
+            border-radius: 20px !important;
           }
         }
       `}</style>
-
-      {/* ALERTA */}
 
       {alerta && (
 
         <div style={styles.alertaWrapper}>
 
           <div style={styles.alerta}>
-
             ✅ {alerta}
-
           </div>
 
         </div>
 
       )}
 
-      {/* HEADER */}
-
       <header
         className="home-header"
         style={styles.header}
       >
-
-        {/* LOGO */}
 
         <div style={styles.logoArea}>
 
@@ -239,39 +321,37 @@ export default function Home({
             </h1>
 
             <p style={styles.logoSub}>
-              luxury experience
+              maio collection
             </p>
 
           </div>
 
         </div>
 
-        {/* MENU */}
-
-        <div
+        <nav
           className="home-nav"
           style={styles.navButtons}
         >
 
           <button
             onClick={() =>
-              setCategoria("todos")
+              abrirView("destaques")
             }
             style={
-              categoria === "todos"
+              view === "destaques"
                 ? styles.activeNav
                 : styles.nav
             }
           >
-            Todos
+            Destaques
           </button>
 
           <button
             onClick={() =>
-              setCategoria("perfume")
+              abrirView("perfumes")
             }
             style={
-              categoria === "perfume"
+              view === "perfumes"
                 ? styles.activeNav
                 : styles.nav
             }
@@ -281,13 +361,10 @@ export default function Home({
 
           <button
             onClick={() =>
-              setCategoria(
-                "eletronicos"
-              )
+              abrirView("eletronicos")
             }
             style={
-              categoria ===
-              "eletronicos"
+              view === "eletronicos"
                 ? styles.activeNav
                 : styles.nav
             }
@@ -295,9 +372,7 @@ export default function Home({
             Eletrônicos
           </button>
 
-        </div>
-
-        {/* CARRINHO */}
+        </nav>
 
         <button
           className="home-cart"
@@ -305,6 +380,7 @@ export default function Home({
           onClick={() =>
             router.push("/carrinho")
           }
+          aria-label="Abrir carrinho"
         >
 
           🛒
@@ -312,9 +388,7 @@ export default function Home({
           {carrinhoQtd > 0 && (
 
             <span style={styles.cartBadge}>
-
               {carrinhoQtd}
-
             </span>
 
           )}
@@ -323,128 +397,222 @@ export default function Home({
 
       </header>
 
-      {/* HERO */}
-
       <section
         className="home-hero"
         style={styles.hero}
       >
 
         <div style={styles.badge}>
-          PREMIUM STORE
+          PLANILHA MAIO 2026
         </div>
 
         <h1
           className="home-title"
           style={styles.heroTitle}
         >
-          Perfumes & Tecnologia
+          Perfumes e tecnologia selecionados
         </h1>
 
         <p style={styles.heroText}>
-          Produtos premium selecionados.
+          Vitrine atualizada com os produtos de maio.
         </p>
 
       </section>
 
-      {/* PRODUTOS */}
+      {view === "destaques" && (
 
-      <section
-        className="home-products"
-        style={styles.productsSection}
-      >
-
-        <div
-          className="home-grid"
-          style={styles.grid}
+        <main
+          className="home-section"
+          style={styles.productsSection}
         >
 
-          {produtosFiltrados.map(
-            (produto) => (
+          <section style={styles.block}>
 
-              <div
-                key={produto.id}
-                style={styles.card}
-              >
+            <div style={styles.sectionHeader}>
 
-                {/* FOTO */}
+              <div>
 
-                <div
-                  style={styles.imageArea}
-                >
+                <p style={styles.sectionEyebrow}>
+                  Produtos destaques
+                </p>
 
-                  <img
-                    src={produto.img}
-                    alt={produto.nome}
-                    style={styles.image}
-                  />
-
-                </div>
-
-                {/* CONTEÚDO */}
-
-                <div
-                  style={styles.cardContent}
-                >
-
-                  <div
-                    style={styles.category}
-                  >
-
-                    {produto.genero}
-
-                  </div>
-
-                  <h2
-                    style={styles.cardTitle}
-                  >
-
-                    {produto.nome}
-
-                  </h2>
-
-                  <div
-                    style={styles.cardBottom}
-                  >
-
-                    <div
-                      style={styles.price}
-                    >
-
-                      R$ {produto.preco}
-
-                    </div>
-
-                    <button
-                      style={
-                        styles.buyBtn
-                      }
-                      onClick={() =>
-                        adicionarCarrinho(
-                          produto
-                        )
-                      }
-                    >
-                      +
-                    </button>
-
-                  </div>
-
-                </div>
+                <h2 style={styles.sectionTitle}>
+                  Perfumes
+                </h2>
 
               </div>
 
-            )
-          )}
+              <span style={styles.countPill}>
+                4 itens
+              </span>
 
-        </div>
+            </div>
 
-      </section>
+            <div
+              className="home-grid"
+              style={styles.grid}
+            >
+              {perfumesDestaque.map(renderCard)}
+            </div>
+
+          </section>
+
+          <section style={styles.block}>
+
+            <div style={styles.sectionHeader}>
+
+              <div>
+
+                <p style={styles.sectionEyebrow}>
+                  Produtos destaques
+                </p>
+
+                <h2 style={styles.sectionTitle}>
+                  Eletrônicos
+                </h2>
+
+              </div>
+
+              <span style={styles.countPill}>
+                4 itens
+              </span>
+
+            </div>
+
+            <div
+              className="home-grid"
+              style={styles.grid}
+            >
+              {eletronicosDestaque.map(renderCard)}
+            </div>
+
+          </section>
+
+        </main>
+
+      )}
+
+      {view === "perfumes" && (
+
+        <main
+          className="home-section"
+          style={styles.productsSection}
+        >
+
+          <div style={styles.sectionHeader}>
+
+            <div>
+
+              <p style={styles.sectionEyebrow}>
+                Perfumes de maio
+              </p>
+
+              <h2 style={styles.sectionTitle}>
+                Busque e filtre por gênero
+              </h2>
+
+            </div>
+
+            <span style={styles.countPill}>
+              {perfumesFiltrados.length} itens
+            </span>
+
+          </div>
+
+          <div
+            className="filter-row"
+            style={styles.filterRow}
+          >
+
+            <input
+              className="search-input"
+              value={busca}
+              onChange={(event) =>
+                setBusca(event.target.value)
+              }
+              placeholder="Pesquisar perfume"
+              style={styles.search}
+            />
+
+            <div
+              className="perfume-tabs"
+              style={styles.tabs}
+            >
+
+              {generoOpcoes.map((opcao) => (
+
+                <button
+                  key={opcao.id}
+                  onClick={() =>
+                    setGenero(opcao.id)
+                  }
+                  style={
+                    genero === opcao.id
+                      ? styles.activeTab
+                      : styles.tab
+                  }
+                >
+                  {opcao.label}
+                </button>
+
+              ))}
+
+            </div>
+
+          </div>
+
+          <div
+            className="home-grid"
+            style={styles.grid}
+          >
+            {perfumesFiltrados.map(renderCard)}
+          </div>
+
+        </main>
+
+      )}
+
+      {view === "eletronicos" && (
+
+        <main
+          className="home-section"
+          style={styles.productsSection}
+        >
+
+          <div style={styles.sectionHeader}>
+
+            <div>
+
+              <p style={styles.sectionEyebrow}>
+                Eletrônicos de maio
+              </p>
+
+              <h2 style={styles.sectionTitle}>
+                Smartwatches e joysticks
+              </h2>
+
+            </div>
+
+            <span style={styles.countPill}>
+              {eletronicosMaio.length} itens
+            </span>
+
+          </div>
+
+          <div
+            className="home-grid"
+            style={styles.grid}
+          >
+            {eletronicosMaio.map(renderCard)}
+          </div>
+
+        </main>
+
+      )}
 
     </div>
 
   );
-
 }
 
 const styles = {
@@ -454,11 +622,9 @@ const styles = {
     background:
       "linear-gradient(to bottom,#050505,#111)",
     color: "#fff",
-    fontFamily: "Arial",
+    fontFamily: "Arial, Helvetica, sans-serif",
     paddingBottom: 80
   },
-
-  /* ALERTA */
 
   alertaWrapper: {
     position: "fixed",
@@ -467,7 +633,8 @@ const styles = {
     right: 0,
     display: "flex",
     justifyContent: "center",
-    zIndex: 9999
+    zIndex: 9999,
+    pointerEvents: "none"
   },
 
   alerta: {
@@ -481,18 +648,19 @@ const styles = {
       "0 15px 35px rgba(0,0,0,0.35)"
   },
 
-  /* HEADER */
-
   header: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
+    gap: 20,
     padding: "22px 40px",
     position: "sticky",
     top: 0,
     zIndex: 999,
     backdropFilter: "blur(15px)",
-    background: "rgba(0,0,0,0.55)"
+    background: "rgba(0,0,0,0.68)",
+    borderBottom:
+      "1px solid rgba(255,255,255,0.06)"
   },
 
   logoArea: {
@@ -530,21 +698,25 @@ const styles = {
 
   navButtons: {
     display: "flex",
-    gap: 14
+    gap: 12
   },
 
   nav: {
-    padding: "12px 18px",
+    minHeight: 44,
+    padding: "0 18px",
     borderRadius: 14,
-    border: "none",
+    border:
+      "1px solid rgba(255,255,255,0.08)",
     background:
       "rgba(255,255,255,0.05)",
     color: "#fff",
-    cursor: "pointer"
+    cursor: "pointer",
+    fontWeight: "bold"
   },
 
   activeNav: {
-    padding: "12px 18px",
+    minHeight: 44,
+    padding: "0 18px",
     borderRadius: 14,
     border: "none",
     background:
@@ -583,7 +755,7 @@ const styles = {
   },
 
   hero: {
-    padding: "80px 40px 50px",
+    padding: "76px 40px 44px",
     textAlign: "center"
   },
 
@@ -594,12 +766,17 @@ const styles = {
     background:
       "rgba(250,204,21,0.1)",
     color: "#facc15",
-    marginBottom: 22
+    marginBottom: 22,
+    border:
+      "1px solid rgba(250,204,21,0.18)",
+    fontWeight: "bold"
   },
 
   heroTitle: {
-    fontSize: 62,
-    marginBottom: 18
+    maxWidth: 760,
+    margin: "0 auto 18px",
+    fontSize: 58,
+    lineHeight: 1.03
   },
 
   heroText: {
@@ -608,97 +785,223 @@ const styles = {
   },
 
   productsSection: {
-    padding: "0 40px"
+    padding: "0 40px",
+    display: "flex",
+    flexDirection: "column",
+    gap: 40
+  },
+
+  block: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 18
+  },
+
+  sectionHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "end",
+    gap: 18,
+    marginBottom: 18
+  },
+
+  sectionEyebrow: {
+    color: "#facc15",
+    fontSize: 12,
+    fontWeight: "bold",
+    letterSpacing: 1.4,
+    marginBottom: 6,
+    textTransform: "uppercase"
+  },
+
+  sectionTitle: {
+    margin: 0,
+    fontSize: 32,
+    lineHeight: 1.1
+  },
+
+  countPill: {
+    flex: "0 0 auto",
+    border:
+      "1px solid rgba(255,255,255,0.08)",
+    borderRadius: 999,
+    color: "#facc15",
+    padding: "9px 14px",
+    fontSize: 13,
+    fontWeight: "bold"
+  },
+
+  filterRow: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 14,
+    marginBottom: 22
+  },
+
+  search: {
+    width: 320,
+    minHeight: 48,
+    borderRadius: 16,
+    border:
+      "1px solid rgba(255,255,255,0.08)",
+    background:
+      "rgba(255,255,255,0.06)",
+    color: "#fff",
+    padding: "0 16px",
+    fontSize: 15,
+    outline: "none"
+  },
+
+  tabs: {
+    display: "flex",
+    gap: 10
+  },
+
+  tab: {
+    minHeight: 44,
+    padding: "0 16px",
+    borderRadius: 14,
+    border:
+      "1px solid rgba(255,255,255,0.08)",
+    background:
+      "rgba(255,255,255,0.05)",
+    color: "#fff",
+    cursor: "pointer",
+    fontWeight: "bold"
+  },
+
+  activeTab: {
+    minHeight: 44,
+    padding: "0 16px",
+    borderRadius: 14,
+    border: "none",
+    background: "#facc15",
+    color: "#000",
+    cursor: "pointer",
+    fontWeight: "bold"
   },
 
   grid: {
     display: "grid",
     gridTemplateColumns:
-      "repeat(auto-fit,minmax(240px,1fr))",
-    gap: 28
+      "repeat(auto-fit,minmax(230px,1fr))",
+    gap: 24
   },
 
   card: {
+    display: "flex",
+    flexDirection: "column",
+    minHeight: 360,
     background:
       "rgba(255,255,255,0.04)",
-    borderRadius: 28,
+    borderRadius: 24,
     overflow: "hidden",
     border:
       "1px solid rgba(255,255,255,0.06)",
-    transition: "0.35s ease",
-    cursor: "pointer",
     boxShadow:
       "0 10px 30px rgba(0,0,0,0.2)"
   },
 
-  imageArea: {
-    height: 260,
-    overflow: "hidden"
+  visualArea: {
+    position: "relative",
+    minHeight: 168,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    background:
+      "radial-gradient(circle at 50% 30%, rgba(250,204,21,0.22), rgba(255,255,255,0.03) 42%, rgba(255,255,255,0.01))"
   },
 
-  image: {
-    width: "100%",
-    height: "100%",
-    objectFit: "cover",
-    transition:
-      "transform 0.5s ease"
+  visualOrb: {
+    width: 92,
+    height: 92,
+    borderRadius: 28,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    color: "#050505",
+    fontWeight: "bold",
+    fontSize: 36,
+    boxShadow:
+      "0 18px 45px rgba(0,0,0,0.35)"
+  },
+
+  stockBadge: {
+    position: "absolute",
+    top: 14,
+    right: 14,
+    borderRadius: 999,
+    background:
+      "rgba(0,0,0,0.5)",
+    border:
+      "1px solid rgba(255,255,255,0.08)",
+    color: "#fff",
+    padding: "7px 10px",
+    fontSize: 12,
+    fontWeight: "bold"
   },
 
   cardContent: {
-    padding: 22
+    flex: 1,
+    display: "flex",
+    flexDirection: "column",
+    padding: 20
+  },
+
+  metaRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 12
   },
 
   category: {
     fontSize: 11,
-    opacity: 0.5,
-    marginBottom: 12,
+    opacity: 0.58,
     textTransform: "uppercase",
-    letterSpacing: 2
+    letterSpacing: 1.2
+  },
+
+  gender: {
+    color: "#facc15",
+    fontSize: 12,
+    fontWeight: "bold"
   },
 
   cardTitle: {
+    flex: 1,
     margin: 0,
-    fontSize: 20,
-    minHeight: 55
+    fontSize: 19,
+    lineHeight: 1.32
   },
 
   cardBottom: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    marginTop: 24
+    gap: 16,
+    marginTop: 22
   },
 
   price: {
     color: "#facc15",
     fontWeight: "bold",
-    fontSize: 28
+    fontSize: 25
   },
 
   buyBtn: {
-    width: 52,
-    height: 52,
-    borderRadius: 18,
+    width: 50,
+    height: 50,
+    borderRadius: 17,
     border: "none",
     background:
       "linear-gradient(135deg,#facc15,#fde047)",
     color: "#000",
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: "bold",
     cursor: "pointer"
   }
 
 };
-
-export async function getServerSideProps() {
-  const { data, error } =
-    await supabase
-      .from("produtos")
-      .select("*");
-
-  return {
-    props: {
-      produtosIniciais: error ? [] : data || []
-    }
-  };
-}
